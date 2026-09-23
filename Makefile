@@ -1,6 +1,7 @@
 CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2 -g
 CPPFLAGS += -Iinclude -Isrc  # separate so CFLAGS=... on the cmd line doesnt wipe it
+CPPFLAGS += -MMD -MP         # track header deps, editing a .h didnt rebuild anything
 
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:src/%.c=build/%.o)
@@ -36,5 +37,7 @@ asan:
 
 clean:
 	rm -rf build
+
+-include $(wildcard build/*.d)
 
 .PHONY: all test clean asan
