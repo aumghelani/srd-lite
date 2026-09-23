@@ -25,7 +25,12 @@ build:
 test: $(TESTS)
 	@for t in $(TESTS); do echo "== $$t"; ./$$t || exit 1; done
 
+# rebuild everything with address + undefined sanitizers and run tests
+asan:
+	$(MAKE) clean
+	$(MAKE) test CFLAGS="-std=c11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" LDFLAGS="-fsanitize=address,undefined"
+
 clean:
 	rm -rf build
 
-.PHONY: all test clean
+.PHONY: all test clean asan
