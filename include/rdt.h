@@ -37,6 +37,7 @@ typedef struct {
     uint64_t pkts_sent;
     uint64_t pkts_recv;
     uint64_t retransmits;
+    uint64_t fast_retx;     /* retransmits that didnt wait for the timer */
     uint64_t dups;          /* duplicate packets we threw away */
     uint64_t bad_pkts;      /* failed checksum etc */
     uint64_t fake_drops;

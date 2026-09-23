@@ -25,6 +25,7 @@
 #define REASM_SLOTS  32                    /* messages being rebuilt */
 #define DONE_MAX     256                   /* finished msgs not read yet */
 #define MAX_RETRIES  20
+#define REORDER_GAP  32                    /* how far behind before we call it lost */
 
 /* a packet that has been sent but not acked */
 typedef struct {
@@ -85,6 +86,8 @@ struct rdt_ep {
     done_msg done[DONE_MAX];
     int done_head;
     int done_count;
+
+    uint32_t max_acked;  /* highest psn acked so far */
 
     rtt_est rtt;
     cc_state cc;
@@ -336,6 +339,9 @@ static void handle_ack(rdt_ep *ep, const pkt_hdr *h)
     if (t->retries == 0)
         rtt_sample(&ep->rtt, now_us() - t->sent_at);
 
+    if (h->psn > ep->max_acked)
+        ep->max_acked = h->psn;
+
     t->used = 0;
     ep->inflight--;
     cc_on_ack(&ep->cc);
@@ -446,14 +452,29 @@ static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
     }
 }
 
+/* packets way behind the newest ack are probably lost. paths reorder
+ * stuff so the gap has to be big-ish, and give it at least one srtt */
+static int looks_lost(const rdt_ep *ep, const tx_slot *t, uint64_t now)
+{
+    return t->retries == 0 &&
+           t->psn + REORDER_GAP < ep->max_acked &&
+           now - t->sent_at > (uint64_t)ep->rtt.srtt;
+}
+
 static void check_timeouts(rdt_ep *ep)
 {
     uint64_t now = now_us();
 
     for (int i = 0; i < TX_SLOTS; i++) {
         tx_slot *t = &ep->tx[i];
-        if (!t->used || now < t->deadline)
+        if (!t->used)
             continue;
+
+        int fast = looks_lost(ep, t, now);
+        if (!fast && now < t->deadline)
+            continue;
+        if (fast)
+            ep->st.fast_retx++;
 
         if (t->retries >= MAX_RETRIES) {
             /* peer is probably gone. stop trying */

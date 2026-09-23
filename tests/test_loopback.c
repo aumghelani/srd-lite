@@ -86,9 +86,10 @@ static void run(int nmsgs, int npaths, double drop, size_t max_len)
     rdt_stats sa, sb;
     rdt_get_stats(a, &sa);
     rdt_get_stats(b, &sb);
-    printf("  %d msgs, %d paths, %.0f%% loss: %.1f ms, retx=%llu dups=%llu cwnd=%.1f\n",
+    printf("  %d msgs, %d paths, %.0f%% loss: %.1f ms, retx=%llu fast=%llu dups=%llu cwnd=%.1f\n",
            nmsgs, npaths, drop * 100, (now_us() - start) / 1000.0,
-           (unsigned long long)sa.retransmits, (unsigned long long)sb.dups, sa.cwnd);
+           (unsigned long long)sa.retransmits, (unsigned long long)sa.fast_retx,
+           (unsigned long long)sb.dups, sa.cwnd);
     CHECK(sa.give_ups == 0);
 
     rdt_close(a);
