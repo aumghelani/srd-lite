@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /* rto limits in us */
-#define RTO_MIN     5000      /* 5ms, loopback is fast */
+#define RTO_MIN     1000      /* 1ms. datacenter rtts are tens of us, tcp uses 200ms */
 #define RTO_MAX     2000000   /* 2s */
 #define RTO_INITIAL 100000    /* 100ms before we have any sample */
 
