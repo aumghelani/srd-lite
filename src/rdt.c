@@ -540,11 +540,33 @@ static void read_socket(rdt_ep *ep, int path)
     }
 }
 
+/* ms until the earliest retransmit timer fires, or -1 if none */
+static int next_timer_ms(const rdt_ep *ep)
+{
+    if (ep->inflight == 0)
+        return -1;
+
+    uint64_t now = now_us(), soonest = UINT64_MAX;
+    for (int i = 0; i < TX_SLOTS; i++)
+        if (ep->tx[i].used && ep->tx[i].deadline < soonest)
+            soonest = ep->tx[i].deadline;
+
+    if (soonest <= now)
+        return 0;
+    return (soonest - now + 999) / 1000; /* round up */
+}
+
 int rdt_progress(rdt_ep *ep, int timeout_ms)
 {
     struct pollfd pfd[RDT_MAX_PATHS];
 
     push_pending(ep);
+
+    /* dont sleep through a retransmit. before this a lost packet on a
+     * side that polled with 10ms waited the whole 10ms */
+    int t = next_timer_ms(ep);
+    if (t >= 0 && (timeout_ms < 0 || t < timeout_ms))
+        timeout_ms = t;
 
     for (int i = 0; i < ep->npaths; i++) {
         pfd[i].fd = ep->fds[i];
