@@ -483,8 +483,9 @@ static void read_socket(rdt_ep *ep, int path)
 {
     uint8_t buf[PKT_MAX];
 
-    /* drain it but dont get stuck here forever */
-    for (int n = 0; n < 64; n++) {
+    /* drain it but dont get stuck here forever. budget has to cover a
+     * full window of acks or they sit in the socket and time out */
+    for (int n = 0; n < TX_SLOTS; n++) {
         struct sockaddr_in from;
         socklen_t flen = sizeof from;
         ssize_t len = recvfrom(ep->fds[path], buf, sizeof buf, 0,
