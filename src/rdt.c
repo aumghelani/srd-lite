@@ -513,7 +513,6 @@ int rdt_progress(rdt_ep *ep, int timeout_ms)
 {
     struct pollfd pfd[RDT_MAX_PATHS];
 
-    check_timeouts(ep);
     push_pending(ep);
 
     for (int i = 0; i < ep->npaths; i++) {
@@ -529,6 +528,10 @@ int rdt_progress(rdt_ep *ep, int timeout_ms)
     for (int i = 0; i < ep->npaths; i++)
         if (pfd[i].revents & POLLIN)
             read_socket(ep, i);
+
+    /* timeouts AFTER reading, otherwise acks sitting in the socket
+     * look like losses and we resend stuff for no reason */
+    check_timeouts(ep);
 
     /* acks may have opened the window */
     push_pending(ep);
