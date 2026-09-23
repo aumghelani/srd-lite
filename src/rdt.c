@@ -445,3 +445,122 @@ static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
         r->used = 0;
     }
 }
+
+static void check_timeouts(rdt_ep *ep)
+{
+    uint64_t now = now_us();
+
+    for (int i = 0; i < TX_SLOTS; i++) {
+        tx_slot *t = &ep->tx[i];
+        if (!t->used || now < t->deadline)
+            continue;
+
+        if (t->retries >= MAX_RETRIES) {
+            /* peer is probably gone. stop trying */
+            t->used = 0;
+            ep->inflight--;
+            ep->st.give_ups++;
+            continue;
+        }
+
+        t->retries++;
+        /* try a different path, the old one might be the broken one */
+        t->path = (t->path + 1) % ep->npaths;
+
+        /* exponential backoff */
+        uint64_t rto = ep->rtt.rto << t->retries;
+        if (rto > RTO_MAX)
+            rto = RTO_MAX;
+        t->deadline = now + rto;
+
+        raw_send(ep, t->path, t->buf, t->len, &ep->peer);
+        ep->st.retransmits++;
+        cc_on_loss(&ep->cc, now, ep->rtt.srtt);
+    }
+}
+
+static void read_socket(rdt_ep *ep, int path)
+{
+    uint8_t buf[PKT_MAX];
+
+    /* drain it but dont get stuck here forever */
+    for (int n = 0; n < 64; n++) {
+        struct sockaddr_in from;
+        socklen_t flen = sizeof from;
+        ssize_t len = recvfrom(ep->fds[path], buf, sizeof buf, 0,
+                               (struct sockaddr *)&from, &flen);
+        if (len < 0)
+            return; /* EAGAIN or real error, either way we're done */
+
+        pkt_hdr h;
+        const uint8_t *payload;
+        if (pkt_decode(buf, len, &h, &payload) < 0) {
+            ep->st.bad_pkts++;
+            continue;
+        }
+        ep->st.pkts_recv++;
+
+        if (h.type == PKT_DATA)
+            handle_data(ep, path, &h, payload, &from);
+        else if (h.type == PKT_ACK)
+            handle_ack(ep, &h);
+        else
+            ep->st.bad_pkts++;
+    }
+}
+
+int rdt_progress(rdt_ep *ep, int timeout_ms)
+{
+    struct pollfd pfd[RDT_MAX_PATHS];
+
+    check_timeouts(ep);
+    push_pending(ep);
+
+    for (int i = 0; i < ep->npaths; i++) {
+        pfd[i].fd = ep->fds[i];
+        pfd[i].events = POLLIN;
+        pfd[i].revents = 0;
+    }
+
+    int rc = poll(pfd, ep->npaths, timeout_ms);
+    if (rc < 0)
+        return errno == EINTR ? 0 : RDT_ERR_SYS;
+
+    for (int i = 0; i < ep->npaths; i++)
+        if (pfd[i].revents & POLLIN)
+            read_socket(ep, i);
+
+    /* acks may have opened the window */
+    push_pending(ep);
+    return rc;
+}
+
+long rdt_recv(rdt_ep *ep, void *buf, size_t cap)
+{
+    if (ep->done_count == 0)
+        return 0;
+
+    done_msg *d = &ep->done[ep->done_head];
+    if (d->len > cap)
+        return RDT_ERR_TOOBIG;
+
+    memcpy(buf, d->data, d->len);
+    long n = d->len;
+    free(d->data);
+    ep->done_head = (ep->done_head + 1) % DONE_MAX;
+    ep->done_count--;
+    return n;
+}
+
+int rdt_idle(const rdt_ep *ep)
+{
+    return ep->inflight == 0 && ep->pend_count == 0;
+}
+
+void rdt_get_stats(const rdt_ep *ep, rdt_stats *st)
+{
+    *st = ep->st;
+    st->cwnd = ep->cc.cwnd;
+    st->srtt_us = ep->rtt.srtt;
+    st->rto_us = ep->rtt.rto;
+}
