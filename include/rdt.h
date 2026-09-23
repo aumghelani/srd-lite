@@ -58,7 +58,8 @@ uint16_t rdt_local_port(const rdt_ep *ep);
 int rdt_send(rdt_ep *ep, const void *buf, size_t len);
 
 /* does all the io: read packets, send acks, retransmit.
- * waits up to timeout_ms for something to happen */
+ * waits up to timeout_ms for something to happen (less if a
+ * retransmit is due sooner). -1 = wait forever */
 int rdt_progress(rdt_ep *ep, int timeout_ms);
 
 /* pop one finished message. returns length, 0 if nothing ready */
