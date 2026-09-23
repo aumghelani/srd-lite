@@ -1,6 +1,6 @@
 CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2 -g
-CFLAGS  += -Iinclude -Isrc
+CPPFLAGS += -Iinclude -Isrc  # separate so CFLAGS=... on the cmd line doesnt wipe it
 
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:src/%.c=build/%.o)
@@ -11,13 +11,13 @@ TESTS = $(patsubst tests/%.c,build/%,$(wildcard tests/test_*.c))
 all: $(LIB) $(TESTS)
 
 build/%.o: src/%.c | build
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(LIB): $(OBJ)
 	ar rcs $@ $^
 
 build/test_%: tests/test_%.c $(LIB)
-	$(CC) $(CFLAGS) $< $(LIB) -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LIB) $(LDFLAGS) -o $@
 
 build:
 	mkdir -p build
