@@ -232,3 +232,42 @@ int rdt_set_peer(rdt_ep *ep, const char *host, uint16_t port)
     freeaddrinfo(res);
     return 0;
 }
+
+int rdt_send(rdt_ep *ep, const void *buf, size_t len)
+{
+    if (!ep->have_peer)
+        return RDT_ERR_NOPEER;
+    if (len == 0)
+        return RDT_ERR_INVAL;
+    if (len > RDT_MAX_MSG)
+        return RDT_ERR_TOOBIG;
+
+    int nfrags = (len + MTU_PAYLOAD - 1) / MTU_PAYLOAD;
+    if (ep->pend_count + nfrags > PENDING_MAX)
+        return RDT_ERR_AGAIN;
+
+    uint32_t id = ep->next_msg_id++;
+    const uint8_t *p = buf;
+
+    /* chop into mtu sized pieces and queue them */
+    for (int i = 0; i < nfrags; i++) {
+        int idx = (ep->pend_head + ep->pend_count) % PENDING_MAX;
+        pending_pkt *pp = &ep->pend[idx];
+        size_t off = (size_t)i * MTU_PAYLOAD;
+        size_t n = len - off < MTU_PAYLOAD ? len - off : MTU_PAYLOAD;
+
+        memset(&pp->h, 0, sizeof pp->h);
+        pp->h.type = PKT_DATA;
+        pp->h.msg_id = id;
+        pp->h.frag_idx = i;
+        pp->h.frag_cnt = nfrags;
+        pp->h.msg_len = len;
+        pp->h.payload_len = n;
+        pp->h.src_port = ep->port;
+        memcpy(pp->payload, p + off, n);
+        ep->pend_count++;
+    }
+
+    ep->st.msgs_sent++;
+    return 0;
+}
