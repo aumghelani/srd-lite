@@ -14,9 +14,8 @@ static uint32_t get32(const uint8_t *p)
 }
 
 /* fnv-1a over the whole packet. checksum field must be zero while hashing */
-static uint32_t fnv1a(const uint8_t *p, size_t n)
+static uint32_t fnv1a_cont(uint32_t h, const uint8_t *p, size_t n)
 {
-    uint32_t h = 2166136261u;
     for (size_t i = 0; i < n; i++) {
         h ^= p[i];
         h *= 16777619u;
@@ -45,7 +44,7 @@ int pkt_encode(const pkt_hdr *h, const void *payload, uint8_t *buf, size_t cap)
     if (h->payload_len)
         memcpy(buf + PKT_HDR_SIZE, payload, h->payload_len);
 
-    put32(buf + 24, fnv1a(buf, total));
+    put32(buf + 24, fnv1a_cont(2166136261u, buf, total));
     return total;
 }
 
@@ -71,11 +70,12 @@ int pkt_decode(const uint8_t *buf, size_t len, pkt_hdr *h, const uint8_t **paylo
     if (PKT_HDR_SIZE + h->payload_len > len)
         return -1;
 
-    /* zero the checksum field in a copy of the header and re-hash */
+    /* hash header (with csum zeroed) then keep going over the payload */
     uint8_t tmp[PKT_HDR_SIZE];
     memcpy(tmp, buf, PKT_HDR_SIZE);
     put32(tmp + 24, 0);
-    uint32_t sum = fnv1a(tmp, PKT_HDR_SIZE);
+    uint32_t sum = fnv1a_cont(2166136261u, tmp, PKT_HDR_SIZE);
+    sum = fnv1a_cont(sum, buf + PKT_HDR_SIZE, h->payload_len);
     if (sum != h->checksum)
         return -1;
 
