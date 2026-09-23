@@ -126,6 +126,7 @@ the completion queue). no locks needed.
 | cc cut once per srtt | cwnd collapsed under loss, fast retx made it *slower* | once per window |
 | poll ignored retransmit deadlines | p99 = 10ms (the server's poll timeout) | cap poll timeout at next deadline |
 | makefile had no header deps | changed RTO_MIN but binaries kept the old value | `-MMD -MP` |
+| busy loop in a test used `int` | ubsan: signed overflow | `unsigned` |
 
 ## tradeoffs / limitations
 
