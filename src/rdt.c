@@ -143,14 +143,15 @@ rdt_ep *rdt_open(const rdt_config *cfg)
     if (!ep)
         return NULL;
 
+    /* set fds to -1 first, calloc gives 0 and close(0) would kill stdin */
+    for (int i = 0; i < RDT_MAX_PATHS; i++)
+        ep->fds[i] = -1;
+
     ep->tx = calloc(TX_SLOTS, sizeof *ep->tx);
     ep->pend = calloc(PENDING_MAX, sizeof *ep->pend);
     ep->seen = calloc(RX_SEEN, sizeof *ep->seen);
     if (!ep->tx || !ep->pend || !ep->seen)
         goto fail;
-
-    for (int i = 0; i < RDT_MAX_PATHS; i++)
-        ep->fds[i] = -1;
 
     /* path 0 is the main port everyone talks to. the rest are just
      * extra source ports so the network hashes them differently */
