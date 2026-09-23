@@ -27,4 +27,10 @@ typedef struct {
 
 #define PKT_HDR_SIZE 28
 
+/* write header + payload into buf. returns total bytes or -1 */
+int pkt_encode(const pkt_hdr *h, const void *payload, uint8_t *buf, size_t cap);
+
+/* parse buf. payload points inside buf. returns 0 ok, -1 bad */
+int pkt_decode(const uint8_t *buf, size_t len, pkt_hdr *h, const uint8_t **payload);
+
 #endif
