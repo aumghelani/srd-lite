@@ -80,7 +80,7 @@ struct rdt_ep {
     int pend_head;
     int pend_count;
 
-    uint32_t *seen;  /* seen[psn % RX_SEEN] = psn + 1 */
+    uint32_t *seen;  /* seen[psn % RX_SEEN] = psn, 0 means empty */
     reasm rx[REASM_SLOTS];
 
     done_msg done[DONE_MAX];
@@ -324,6 +324,8 @@ static void push_pending(rdt_ep *ep)
         raw_send(ep, t->path, t->buf, t->len, &ep->peer);
 
         ep->next_psn++;
+        if (ep->next_psn == 0)
+            ep->next_psn = 1; /* 0 is the "empty" marker in seen[] */
         ep->inflight++;
         ep->pend_head = (ep->pend_head + 1) % PENDING_MAX;
         ep->pend_count--;
@@ -396,7 +398,7 @@ static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
 {
     /* reply goes back to the exact port it came from (their path socket) */
     uint32_t *seen = &ep->seen[h->psn % RX_SEEN];
-    if (*seen == h->psn + 1) {
+    if (h->psn != 0 && *seen == h->psn) {
         /* already have it. our ack probably got lost, so ack again */
         ep->st.dups++;
         send_ack(ep, path, h->psn, from);
@@ -428,7 +430,7 @@ static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
         r->have[h->frag_idx] = 1;
         r->got++;
     }
-    *seen = h->psn + 1;
+    *seen = h->psn;
     send_ack(ep, path, h->psn, from);
 
     /* learn who to talk back to if nobody told us */
