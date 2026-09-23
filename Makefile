@@ -7,8 +7,9 @@ OBJ = $(SRC:src/%.c=build/%.o)
 LIB = build/librdt.a
 
 TESTS = $(patsubst tests/%.c,build/%,$(wildcard tests/test_*.c))
+TOOLS = $(patsubst tools/%.c,build/%,$(wildcard tools/*.c))
 
-all: $(LIB) $(TESTS)
+all: $(LIB) $(TESTS) $(TOOLS)
 
 build/%.o: src/%.c | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
@@ -17,6 +18,9 @@ $(LIB): $(OBJ)
 	ar rcs $@ $^
 
 build/test_%: tests/test_%.c $(LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LIB) $(LDFLAGS) -o $@
+
+build/%: tools/%.c $(LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LIB) $(LDFLAGS) -o $@
 
 build:
