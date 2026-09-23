@@ -1,6 +1,7 @@
 CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2 -g
 CPPFLAGS += -Iinclude -Isrc  # separate so CFLAGS=... on the cmd line doesnt wipe it
+CPPFLAGS += -D_POSIX_C_SOURCE=200809L  # glibc hides clock_gettime in plain c11
 CPPFLAGS += -MMD -MP         # track header deps, editing a .h didnt rebuild anything
 
 SRC = $(wildcard src/*.c)
