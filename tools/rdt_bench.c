@@ -125,6 +125,10 @@ int main(int argc, char **argv)
     printf("  retx=%llu fast=%llu srtt=%lluus rto=%lluus cwnd=%.1f\n",
            (unsigned long long)st.retransmits, (unsigned long long)st.fast_retx,
            (unsigned long long)st.srtt_us, (unsigned long long)st.rto_us, st.cwnd);
+    for (int i = 0; i < cfg.npaths; i++)
+        printf("  path %d: sent=%llu lost=%llu\n", i,
+               (unsigned long long)st.path_sent[i],
+               (unsigned long long)st.path_lost[i]);
     rdt_close(ep);
     return rc;
 }
