@@ -36,7 +36,12 @@ static int ping(rdt_ep *ep, size_t size, int count)
 
     for (int i = 0; i < count; i++) {
         uint64_t t0 = now_us();
-        rdt_send(ep, buf, size);
+        int rc = rdt_send(ep, buf, size);
+        if (rc < 0) {
+            fprintf(stderr, "send: %s\n", rdt_strerror(rc));
+            free(lat);
+            return 1;
+        }
 
         long n = 0;
         while (n == 0) {
