@@ -340,7 +340,7 @@ static void handle_ack(rdt_ep *ep, const pkt_hdr *h)
     if (t->retries == 0)
         rtt_sample(&ep->rtt, now_us() - t->sent_at);
 
-    if (h->psn > ep->max_acked)
+    if (psn_before(ep->max_acked, h->psn))
         ep->max_acked = h->psn;
 
     t->used = 0;
@@ -458,7 +458,7 @@ static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
 static int looks_lost(const rdt_ep *ep, const tx_slot *t, uint64_t now)
 {
     return t->retries == 0 &&
-           t->psn + REORDER_GAP < ep->max_acked &&
+           psn_before(t->psn + REORDER_GAP, ep->max_acked) &&
            now - t->sent_at > (uint64_t)ep->rtt.srtt;
 }
 
@@ -500,7 +500,7 @@ static void check_timeouts(rdt_ep *ep)
 
         /* cut cwnd once per window, like newreno. srtt on loopback is
          * so small the time based check alone cut on every single loss */
-        if (t->psn >= ep->recover) {
+        if (!psn_before(t->psn, ep->recover)) {
             cc_on_loss(&ep->cc, now, ep->rtt.srtt);
             ep->recover = ep->next_psn;
         }

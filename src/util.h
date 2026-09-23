@@ -22,4 +22,10 @@ static inline uint32_t xorshift32(uint32_t *s)
     return *s = x;
 }
 
+/* psn compare that survives wrapping past 2^32 */
+static inline int psn_before(uint32_t a, uint32_t b)
+{
+    return (int32_t)(a - b) < 0;
+}
+
 #endif
