@@ -325,3 +325,30 @@ static void push_pending(rdt_ep *ep)
         ep->pend_count--;
     }
 }
+
+static void handle_ack(rdt_ep *ep, const pkt_hdr *h)
+{
+    tx_slot *t = &ep->tx[h->psn % TX_SLOTS];
+    if (!t->used || t->psn != h->psn)
+        return; /* old or duplicate ack */
+
+    /* karn: dont trust rtt from a packet we sent more than once */
+    if (t->retries == 0)
+        rtt_sample(&ep->rtt, now_us() - t->sent_at);
+
+    t->used = 0;
+    ep->inflight--;
+    cc_on_ack(&ep->cc);
+}
+
+static void send_ack(rdt_ep *ep, int path, uint32_t psn, const struct sockaddr_in *to)
+{
+    pkt_hdr h;
+    uint8_t buf[PKT_HDR_SIZE];
+    memset(&h, 0, sizeof h);
+    h.type = PKT_ACK;
+    h.psn = psn;
+    h.src_port = ep->port;
+    int n = pkt_encode(&h, NULL, buf, sizeof buf);
+    raw_send(ep, path, buf, n, to);
+}
