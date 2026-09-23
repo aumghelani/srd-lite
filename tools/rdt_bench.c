@@ -29,6 +29,8 @@ static int ping(rdt_ep *ep, size_t size, int count)
 {
     static unsigned char buf[RDT_MAX_MSG], rbuf[RDT_MAX_MSG];
     uint64_t *lat = malloc(count * sizeof *lat);
+    if (!lat)
+        return 1;
     memset(buf, 'x', size);
     buf[0] = 'P';
 
@@ -42,6 +44,7 @@ static int ping(rdt_ep *ep, size_t size, int count)
             n = rdt_recv(ep, rbuf, sizeof rbuf);
             if (now_us() - t0 > 5000000) {
                 fprintf(stderr, "timed out waiting for echo %d\n", i);
+                free(lat);
                 return 1;
             }
         }
