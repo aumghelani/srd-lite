@@ -215,3 +215,20 @@ const char *rdt_strerror(int err)
     default:             return "unknown error";
     }
 }
+
+int rdt_set_peer(rdt_ep *ep, const char *host, uint16_t port)
+{
+    struct addrinfo hints, *res;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;   /* ipv4 only for now */
+    hints.ai_socktype = SOCK_DGRAM;
+
+    if (getaddrinfo(host, NULL, &hints, &res) != 0)
+        return RDT_ERR_INVAL;
+
+    memcpy(&ep->peer, res->ai_addr, sizeof ep->peer);
+    ep->peer.sin_port = htons(port);
+    ep->have_peer = 1;
+    freeaddrinfo(res);
+    return 0;
+}
