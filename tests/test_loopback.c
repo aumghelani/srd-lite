@@ -92,6 +92,10 @@ static void run(int nmsgs, int npaths, double drop, size_t max_len)
            (unsigned long long)sb.dups, sa.cwnd);
     CHECK(sa.give_ups == 0);
 
+    /* spraying should put traffic on every path */
+    for (int i = 0; i < npaths; i++)
+        CHECK(sa.path_sent[i] > 0);
+
     rdt_close(a);
     rdt_close(b);
 }
