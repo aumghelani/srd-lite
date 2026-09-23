@@ -88,6 +88,7 @@ struct rdt_ep {
     int done_count;
 
     uint32_t max_acked;  /* highest psn acked so far */
+    uint32_t recover;    /* losses below this psn were already punished */
 
     rtt_est rtt;
     cc_state cc;
@@ -496,7 +497,13 @@ static void check_timeouts(rdt_ep *ep)
 
         raw_send(ep, t->path, t->buf, t->len, &ep->peer);
         ep->st.retransmits++;
-        cc_on_loss(&ep->cc, now, ep->rtt.srtt);
+
+        /* cut cwnd once per window, like newreno. srtt on loopback is
+         * so small the time based check alone cut on every single loss */
+        if (t->psn >= ep->recover) {
+            cc_on_loss(&ep->cc, now, ep->rtt.srtt);
+            ep->recover = ep->next_psn;
+        }
     }
 }
 
