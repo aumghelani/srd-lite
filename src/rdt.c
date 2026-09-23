@@ -352,3 +352,96 @@ static void send_ack(rdt_ep *ep, int path, uint32_t psn, const struct sockaddr_i
     int n = pkt_encode(&h, NULL, buf, sizeof buf);
     raw_send(ep, path, buf, n, to);
 }
+
+static reasm *find_reasm(rdt_ep *ep, const pkt_hdr *h)
+{
+    reasm *free_slot = NULL;
+    for (int i = 0; i < REASM_SLOTS; i++) {
+        reasm *r = &ep->rx[i];
+        if (r->used && r->msg_id == h->msg_id)
+            return r;
+        if (!r->used && !free_slot)
+            free_slot = r;
+    }
+    if (!free_slot)
+        return NULL;
+
+    /* first fragment of a new message */
+    free_slot->have = calloc(h->frag_cnt, 1);
+    free_slot->data = malloc(h->msg_len);
+    if (!free_slot->have || !free_slot->data) {
+        free(free_slot->have);
+        free(free_slot->data);
+        free_slot->have = NULL;
+        free_slot->data = NULL;
+        return NULL;
+    }
+    free_slot->used = 1;
+    free_slot->msg_id = h->msg_id;
+    free_slot->msg_len = h->msg_len;
+    free_slot->frag_cnt = h->frag_cnt;
+    free_slot->got = 0;
+    return free_slot;
+}
+
+static void handle_data(rdt_ep *ep, int path, const pkt_hdr *h,
+                        const uint8_t *payload, const struct sockaddr_in *from)
+{
+    /* reply goes back to the exact port it came from (their path socket) */
+    uint32_t *seen = &ep->seen[h->psn % RX_SEEN];
+    if (*seen == h->psn + 1) {
+        /* already have it. our ack probably got lost, so ack again */
+        ep->st.dups++;
+        send_ack(ep, path, h->psn, from);
+        return;
+    }
+
+    /* sanity checks, dont trust the wire */
+    size_t off = (size_t)h->frag_idx * MTU_PAYLOAD;
+    if (h->frag_cnt == 0 || h->frag_idx >= h->frag_cnt ||
+        h->msg_len > RDT_MAX_MSG || off + h->payload_len > h->msg_len) {
+        ep->st.bad_pkts++;
+        return;
+    }
+
+    /* no room to deliver. drop without acking so they resend later */
+    if (ep->done_count == DONE_MAX)
+        return;
+
+    reasm *r = find_reasm(ep, h);
+    if (!r)
+        return;
+    if (r->msg_len != h->msg_len || r->frag_cnt != h->frag_cnt) {
+        ep->st.bad_pkts++;
+        return;
+    }
+
+    if (!r->have[h->frag_idx]) {
+        memcpy(r->data + off, payload, h->payload_len);
+        r->have[h->frag_idx] = 1;
+        r->got++;
+    }
+    *seen = h->psn + 1;
+    send_ack(ep, path, h->psn, from);
+
+    /* learn who to talk back to if nobody told us */
+    if (!ep->have_peer) {
+        ep->peer = *from;
+        ep->peer.sin_port = htons(h->src_port);
+        ep->have_peer = 1;
+    }
+
+    if (r->got == r->frag_cnt) {
+        /* whole message is here. hand it over, dont wait for older ones */
+        done_msg *d = &ep->done[(ep->done_head + ep->done_count) % DONE_MAX];
+        d->data = r->data;
+        d->len = r->msg_len;
+        ep->done_count++;
+        ep->st.msgs_recv++;
+
+        free(r->have);
+        r->have = NULL;
+        r->data = NULL;
+        r->used = 0;
+    }
+}
