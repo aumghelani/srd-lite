@@ -62,11 +62,25 @@ static void test_encode_too_small(void)
     PASS();
 }
 
+static void test_corrupt_payload(void)
+{
+    uint8_t buf[64];
+    pkt_hdr h = {0}, out;
+    const uint8_t *pl;
+    h.type = PKT_DATA;
+    h.payload_len = 4;
+    int n = pkt_encode(&h, "abcd", buf, sizeof buf);
+    buf[n - 1] ^= 1; /* flip one bit */
+    CHECK(pkt_decode(buf, n, &out, &pl) == -1);
+    PASS();
+}
+
 int main(void)
 {
     test_roundtrip();
     test_short_buffer();
     test_bad_magic();
     test_encode_too_small();
+    test_corrupt_payload();
     return 0;
 }
