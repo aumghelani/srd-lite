@@ -24,7 +24,7 @@ static void test_rng_not_stuck(void)
 static void test_clock_moves(void)
 {
     uint64_t a = now_us();
-    volatile int x = 0;
+    volatile unsigned x = 0; /* unsigned, signed overflow is ub (ubsan caught it) */
     for (int i = 0; i < 1000000; i++) x += i;
     uint64_t b = now_us();
     CHECK(b >= a);
