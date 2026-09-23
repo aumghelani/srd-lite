@@ -290,6 +290,7 @@ static void raw_send(rdt_ep *ep, int path, const uint8_t *buf, int len,
     /* udp is lossy anyway, if the kernel says no we treat it as a drop */
     sendto(ep->fds[path], buf, len, 0, (const struct sockaddr *)to, sizeof *to);
     ep->st.pkts_sent++;
+    ep->st.path_sent[path]++;
 }
 
 static int pick_path(rdt_ep *ep)
@@ -488,6 +489,7 @@ static void check_timeouts(rdt_ep *ep)
         }
 
         t->retries++;
+        ep->st.path_lost[t->path]++;
         /* try a different path, the old one might be the broken one */
         t->path = (t->path + 1) % ep->npaths;
 

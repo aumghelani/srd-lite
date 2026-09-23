@@ -42,6 +42,8 @@ typedef struct {
     uint64_t bad_pkts;      /* failed checksum etc */
     uint64_t fake_drops;
     uint64_t give_ups;      /* packets dropped after too many retries */
+    uint64_t path_sent[RDT_MAX_PATHS];  /* packets out per path */
+    uint64_t path_lost[RDT_MAX_PATHS];  /* retransmits blamed on each path */
     double cwnd;
     uint64_t srtt_us;
     uint64_t rto_us;
