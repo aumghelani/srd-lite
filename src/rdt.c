@@ -271,3 +271,57 @@ int rdt_send(rdt_ep *ep, const void *buf, size_t len)
     ep->st.msgs_sent++;
     return 0;
 }
+
+/* every packet goes out through here so fake loss hits data and acks */
+static void raw_send(rdt_ep *ep, int path, const uint8_t *buf, int len,
+                     const struct sockaddr_in *to)
+{
+    if (ep->drop_rate > 0) {
+        double r = (double)xorshift32(&ep->rng) / 4294967296.0;
+        if (r < ep->drop_rate) {
+            ep->st.fake_drops++;
+            return;
+        }
+    }
+    /* udp is lossy anyway, if the kernel says no we treat it as a drop */
+    sendto(ep->fds[path], buf, len, 0, (const struct sockaddr *)to, sizeof *to);
+    ep->st.pkts_sent++;
+}
+
+static int pick_path(rdt_ep *ep)
+{
+    /* round robin across source ports */
+    int p = ep->next_path;
+    ep->next_path = (ep->next_path + 1) % ep->npaths;
+    return p;
+}
+
+/* move packets from the pending queue into flight while cwnd allows */
+static void push_pending(rdt_ep *ep)
+{
+    uint64_t now = now_us();
+
+    while (ep->pend_count > 0 && cc_can_send(&ep->cc, ep->inflight)) {
+        uint32_t psn = ep->next_psn;
+        tx_slot *t = &ep->tx[psn % TX_SLOTS];
+        if (t->used)
+            break; /* an old packet still holds this slot */
+
+        pending_pkt *pp = &ep->pend[ep->pend_head];
+        pp->h.psn = psn;
+        t->len = pkt_encode(&pp->h, pp->payload, t->buf, sizeof t->buf);
+        t->used = 1;
+        t->psn = psn;
+        t->retries = 0;
+        t->path = pick_path(ep);
+        t->sent_at = now;
+        t->deadline = now + ep->rtt.rto;
+
+        raw_send(ep, t->path, t->buf, t->len, &ep->peer);
+
+        ep->next_psn++;
+        ep->inflight++;
+        ep->pend_head = (ep->pend_head + 1) % PENDING_MAX;
+        ep->pend_count--;
+    }
+}
