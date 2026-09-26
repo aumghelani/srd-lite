@@ -67,7 +67,7 @@ int pkt_decode(const uint8_t *buf, size_t len, pkt_hdr *h, const uint8_t **paylo
 
     if (h->magic != PKT_MAGIC || h->version != PKT_VERSION)
         return -1;
-    if (PKT_HDR_SIZE + h->payload_len > len)
+    if ((size_t)PKT_HDR_SIZE + h->payload_len > len)
         return -1;
 
     /* hash header (with csum zeroed) then keep going over the payload */
