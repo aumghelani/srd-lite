@@ -13,7 +13,7 @@ jobs:
             cc: gcc   # gcc on mac is just clang anyway
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: build + test
         run: make test CC=${{ matrix.cc }}
       - name: sanitizers
